@@ -1,0 +1,9 @@
+{
+  "title": "Działania na liczbach całkowitych i ułamkach zwykłych",
+  "source": "Supplied scanned kartkówka, group 22; question text only, no pupil work",
+  "questions": [
+    {"type": "open", "prompt": "Oblicz: 4((12 - 14) - 3(6 - 3) : 3)", "points": 3, "rubric": "3 pkt za poprawne obliczenie. Punkty częściowe zatwierdza nauczyciel."},
+    {"type": "open", "prompt": "Oblicz: 14 - 6 - (15 - 10) : 6", "points": 3, "rubric": "3 pkt za poprawne obliczenie. Punkty częściowe zatwierdza nauczyciel."},
+    {"type": "open", "prompt": "Oblicz: (16 : 2 - (15 - 4)) · (2 - 3)", "points": 3, "rubric": "3 pkt za poprawne obliczenie. Punkty częściowe zatwierdza nauczyciel."}
+  ]
+}

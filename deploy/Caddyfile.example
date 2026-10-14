@@ -1,0 +1,35 @@
+# Configure a private authentication snippet named teacher_auth first.
+assessment.example.org {
+    redir /kartkowki /kartkowki/ 308
+    redir /kartkowki/test /kartkowki/test/ 308
+    handle /kartkowki/test/s/* {
+        uri strip_prefix /kartkowki/test
+        reverse_proxy 127.0.0.1:8769 {
+            header_up X-Forwarded-Prefix /kartkowki/test
+            header_up -X-Kartkowki-Teacher
+        }
+    }
+    handle /kartkowki/test/* {
+        import teacher_auth
+        uri strip_prefix /kartkowki/test
+        reverse_proxy 127.0.0.1:8769 {
+            header_up X-Forwarded-Prefix /kartkowki/test
+            header_up X-Kartkowki-Teacher 1
+        }
+    }
+    handle /kartkowki/s/* {
+        uri strip_prefix /kartkowki
+        reverse_proxy 127.0.0.1:8768 {
+            header_up X-Forwarded-Prefix /kartkowki
+            header_up -X-Kartkowki-Teacher
+        }
+    }
+    handle /kartkowki/* {
+        import teacher_auth
+        uri strip_prefix /kartkowki
+        reverse_proxy 127.0.0.1:8768 {
+            header_up X-Forwarded-Prefix /kartkowki
+            header_up X-Kartkowki-Teacher 1
+        }
+    }
+}

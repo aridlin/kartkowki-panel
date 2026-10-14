@@ -1,0 +1,42 @@
+x-common: &common
+  image: kartkowki-panel:local
+  build: .
+  restart: unless-stopped
+  env_file: .env
+  read_only: true
+  tmpfs: [/tmp:rw,noexec,nosuid,size=256m]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+services:
+  web:
+    <<: *common
+    container_name: assessment-web
+    ports: [127.0.0.1:8768:8765]
+    environment:
+      KARTKOWKI_SANDBOX_DB: /sandbox/kartkowki.sqlite3
+      KARTKOWKI_SANDBOX_URL: http://sandbox:8765
+    volumes: [./data:/data, ./sandbox-data:/sandbox:ro, ./codex-home:/home/kartkowki/.codex]
+  worker:
+    <<: *common
+    command: [python, paper_worker.py]
+    volumes: [./data:/data, ./codex-home:/home/kartkowki/.codex]
+  author:
+    <<: *common
+    command: [python, paper_worker.py, --author-only]
+    volumes: [./data:/data, ./codex-home:/home/kartkowki/.codex]
+  sandbox:
+    <<: *common
+    container_name: assessment-sandbox
+    ports: [127.0.0.1:8769:8765]
+    environment: {KARTKOWKI_SANDBOX: '1'}
+    volumes: [./sandbox-data:/data, ./codex-home:/home/kartkowki/.codex]
+  sandbox-worker:
+    <<: *common
+    command: [python, paper_worker.py]
+    environment: {KARTKOWKI_SANDBOX: '1'}
+    volumes: [./sandbox-data:/data, ./codex-home:/home/kartkowki/.codex]
+  sandbox-author:
+    <<: *common
+    command: [python, paper_worker.py, --author-only]
+    environment: {KARTKOWKI_SANDBOX: '1'}
+    volumes: [./sandbox-data:/data, ./codex-home:/home/kartkowki/.codex]

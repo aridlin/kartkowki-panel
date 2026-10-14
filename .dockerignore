@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+**/*.sqlite*
+**/codex-home
+**/data
+**/sandbox-data
+rosters-clean.json
+grading-sources
+__pycache__
+tests

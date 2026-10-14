@@ -1,0 +1,415 @@
+/* Paper Ink
+   Connected black-and-white interface frames with copy-paper edge roughness. */
+
+@font-face {
+  font-family: "Paper Ink";
+  src: url("paper-ink-regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  --pi-paper: oklch(100% 0 0);
+  --pi-ink: oklch(0% 0 0);
+  --pi-magenta: oklch(70.17% .3225 328.36);
+  --pi-accent: var(--pi-ink);
+  --pi-accent-fg: var(--pi-paper);
+  --pi-feather: oklch(0% 0 0 / .24);
+  --pi-feather-soft: oklch(0% 0 0 / .11);
+  --pi-rule: 2px;
+  --pi-half-rule: 1px;
+  --pi-cell-height: 44px;
+  --pi-pad-x: 14px;
+  --pi-pad-y: 9px;
+  --pi-font: "Paper Ink", "Fantasque Sans Mono", monospace;
+  --pi-edge-filter: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='edge' x='-6%25' y='-8%25' width='112%25' height='116%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.38 .66' numOctaves='2' seed='29' result='fiber'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='fiber' scale='1.05' xChannelSelector='R' yChannelSelector='G' result='roughCore'/%3E%3CfeMorphology in='roughCore' operator='dilate' radius='.28' result='wick'/%3E%3CfeComponentTransfer in='wick' result='feather'%3E%3CfeFuncA type='linear' slope='.20'/%3E%3C/feComponentTransfer%3E%3CfeMerge%3E%3CfeMergeNode in='feather'/%3E%3CfeMergeNode in='roughCore'/%3E%3C/feMerge%3E%3C/filter%3E%3C/svg%3E%23edge");
+}
+
+[data-pi-accent="magenta"] {
+  --pi-accent: var(--pi-magenta);
+  --pi-accent-fg: var(--pi-ink);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+.pi-paper {
+  background: var(--pi-paper);
+  color: var(--pi-ink);
+  font-family: var(--pi-font);
+  font-weight: 400;
+  line-height: 1.24;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+}
+
+.pi-paper :is(h1, h2, h3, h4, p, span, a, button, input, textarea) {
+  font-family: inherit;
+  font-weight: 400;
+}
+
+.pi-ink {
+  filter: var(--pi-edge-filter);
+  text-shadow: 0 0 .2px var(--pi-feather);
+}
+
+.pi-accent { color: var(--pi-accent); }
+.pi-accent-fill { background: var(--pi-accent); color: var(--pi-accent-fg); }
+
+/* A frame is the fundamental blueprint unit. Connected layouts assign each
+   shared edge to exactly one frame, preventing doubled or offset seams. */
+.pi-frame {
+  --pi-border-top: var(--pi-rule);
+  --pi-border-right: var(--pi-rule);
+  --pi-border-bottom: var(--pi-rule);
+  --pi-border-left: var(--pi-rule);
+  background: var(--pi-paper);
+  min-width: 0;
+  position: relative;
+}
+
+.pi-frame::before {
+  border-color: var(--pi-ink);
+  border-style: solid;
+  border-width:
+    var(--pi-border-top)
+    var(--pi-border-right)
+    var(--pi-border-bottom)
+    var(--pi-border-left);
+  box-shadow:
+    0 0 0 .14px var(--pi-feather),
+    0 0 .3px .06px var(--pi-feather-soft);
+  content: "";
+  filter: var(--pi-edge-filter);
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+
+/* Strict line semantics.
+   solid  = confirmed structure/data (the default frame)
+   dashed = input or awaiting material
+   hatch  = active work crossing a boundary */
+.pi-pending::before { border-style: dashed; }
+
+.pi-active-right::after,
+.pi-active-bottom::after {
+  background: repeating-linear-gradient(
+    58deg,
+    transparent 0 2px,
+    var(--pi-ink) 2px 3.35px,
+    transparent 3.35px 5px
+  );
+  box-shadow: 0 0 .28px var(--pi-feather);
+  content: "";
+  filter: var(--pi-edge-filter);
+  pointer-events: none;
+  position: absolute;
+  z-index: 4;
+}
+
+.pi-active-right::after {
+  bottom: -2px;
+  right: -4px;
+  top: -2px;
+  width: 9px;
+}
+
+.pi-active-bottom::after {
+  bottom: -4px;
+  height: 9px;
+  left: -2px;
+  right: -2px;
+}
+
+/* Connected layout primitives. */
+.pi-sheet {
+  display: grid;
+  gap: 0;
+  isolation: isolate;
+}
+
+.pi-sheet > .pi-frame { margin: 0; }
+
+/* Grid-owned rules are the safest way to compose a full page. One background
+   draws every shared edge, so seams cannot double, drift, or miss by a pixel. */
+.pi-blueprint-grid {
+  background: var(--pi-ink);
+  display: grid;
+  filter: var(--pi-edge-filter);
+  gap: var(--pi-rule);
+  isolation: isolate;
+  padding: var(--pi-rule);
+}
+
+.pi-blueprint-grid > * {
+  background-color: var(--pi-paper);
+  min-width: 0;
+}
+
+.pi-blueprint-grid > .pi-frame::before { display: none; }
+.pi-blueprint-grid .pi-ink { filter: none; }
+
+/* A semantic dashed boundary can replace one part of the grid rule without
+   changing track geometry. White underpainting removes the solid rule first. */
+.pi-blueprint-grid > .pi-frame.pi-pending::before {
+  border: var(--pi-rule) dashed var(--pi-ink);
+  box-shadow:
+    0 0 0 var(--pi-rule) var(--pi-paper),
+    inset 0 0 0 var(--pi-rule) var(--pi-paper);
+  display: block;
+  inset: calc(0px - var(--pi-half-rule));
+  z-index: 6;
+}
+
+/* Ready-made uploader sheet: add the eight area classes and the layout is
+   aligned, responsive, and printable without custom border ownership. */
+.pi-uploader-grid {
+  --pi-uploader-side: minmax(280px, 360px);
+  grid-template-areas:
+    "brand meta"
+    "workflow workflow"
+    "drop summary"
+    "queue control"
+    "legend legend";
+  grid-template-columns: minmax(0, 1fr) var(--pi-uploader-side);
+}
+
+.pi-uploader-brand { grid-area: brand; }
+.pi-uploader-meta { grid-area: meta; }
+.pi-uploader-workflow { grid-area: workflow; }
+.pi-uploader-drop { grid-area: drop; }
+.pi-uploader-summary { grid-area: summary; }
+.pi-uploader-queue { grid-area: queue; }
+.pi-uploader-control { grid-area: control; }
+.pi-uploader-legend { grid-area: legend; }
+
+.pi-uploader-steps {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--pi-uploader-side);
+}
+
+/* Geometric emphasis: triangle = action/input, square = confirmed record,
+   multiplication sign = remove/error. */
+.pi-mark,
+.pi-symbol {
+  display: inline-block;
+  font-size: calc(1em + 1px);
+  line-height: 1;
+  vertical-align: -.04em;
+}
+
+.pi-mark { margin-right: .55em; }
+.pi-mark-input::before { content: "△"; }
+.pi-mark-record::before { content: "□"; }
+.pi-mark-error::before { content: "×"; }
+
+/* Optional process-screening utilities. Use for state emphasis, never as page
+   texture. Both inherit the single configured accent color. */
+.pi-halftone {
+  background-color: var(--pi-paper);
+  background-image: radial-gradient(circle, var(--pi-accent) 0 .7px, transparent .85px);
+  background-size: 4px 4px;
+}
+
+.pi-halftone-square {
+  background-color: var(--pi-paper);
+  background-image:
+    linear-gradient(90deg, var(--pi-accent) 1px, transparent 1px),
+    linear-gradient(var(--pi-accent) 1px, transparent 1px);
+  background-size: 4px 4px;
+}
+
+.pi-bayer {
+  background-color: var(--pi-paper);
+  background-image:
+    radial-gradient(circle at 12.5% 12.5%, var(--pi-accent) 0 .55px, transparent .7px),
+    radial-gradient(circle at 62.5% 12.5%, var(--pi-accent) 0 1px, transparent 1.15px),
+    radial-gradient(circle at 37.5% 62.5%, var(--pi-accent) 0 1.35px, transparent 1.5px),
+    radial-gradient(circle at 87.5% 62.5%, var(--pi-accent) 0 .8px, transparent .95px);
+  background-size: 8px 8px;
+}
+
+.pi-strip {
+  align-items: stretch;
+  display: flex;
+  max-width: 100%;
+  width: fit-content;
+}
+
+.pi-strip + .pi-strip { margin-top: calc(var(--pi-rule) * -1); }
+.pi-strip.is-offset { margin-left: clamp(28px, 5vw, 72px); }
+
+.pi-cell {
+  --pi-tilt: 0deg;
+  align-items: center;
+  appearance: none;
+  background: var(--pi-paper);
+  border: 0;
+  color: var(--pi-ink);
+  display: flex;
+  filter: var(--pi-edge-filter);
+  flex: 0 1 auto;
+  font: inherit;
+  justify-content: flex-start;
+  min-height: var(--pi-cell-height);
+  min-width: 0;
+  padding: var(--pi-pad-y) var(--pi-pad-x);
+  position: relative;
+  text-align: left;
+  transform: rotate(var(--pi-tilt));
+  z-index: 0;
+}
+
+.pi-cell::before {
+  border: var(--pi-rule) solid var(--pi-ink);
+  box-shadow:
+    0 0 0 .14px var(--pi-feather),
+    0 0 .3px .06px var(--pi-feather-soft);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.pi-cell .pi-ink { filter: none; }
+.pi-strip > .pi-cell + .pi-cell { margin-left: calc(var(--pi-rule) * -1); }
+.pi-cell:nth-child(4n + 1) { --pi-tilt: -.018deg; }
+.pi-cell:nth-child(4n + 2) { --pi-tilt: .022deg; }
+.pi-cell:nth-child(4n + 3) { --pi-tilt: -.014deg; }
+.pi-cell:nth-child(4n) { --pi-tilt: .017deg; }
+
+.pi-w-s { width: clamp(8.5rem, 13vw, 11rem); }
+.pi-w-m { width: clamp(12rem, 19vw, 17rem); }
+.pi-w-l { width: clamp(17rem, 28vw, 25rem); }
+.pi-w-xl { width: clamp(23rem, 38vw, 34rem); }
+
+.pi-stack {
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
+  width: fit-content;
+}
+
+.pi-stack > .pi-cell + .pi-cell { margin-top: calc(var(--pi-rule) * -1); }
+.pi-stack > .pi-cell { width: 100%; }
+.pi-cluster { max-width: 100%; width: fit-content; }
+.pi-cluster + .pi-cluster { margin-top: clamp(36px, 5vw, 64px); }
+
+:is(button, a).pi-cell { cursor: pointer; text-decoration: none; }
+:is(button, a).pi-cell:hover,
+:is(button, a).pi-cell[aria-pressed="true"] {
+  background: var(--pi-ink);
+  color: var(--pi-paper);
+  z-index: 3;
+}
+
+:is(button, a).pi-cell:focus-visible,
+.pi-button:focus-visible {
+  outline: 3px double var(--pi-ink);
+  outline-offset: 4px;
+  z-index: 5;
+}
+
+.pi-button {
+  align-items: center;
+  appearance: none;
+  background: var(--pi-ink);
+  border: var(--pi-rule) solid var(--pi-ink);
+  color: var(--pi-paper);
+  cursor: pointer;
+  display: inline-flex;
+  filter: var(--pi-edge-filter);
+  font: inherit;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 15px;
+  text-decoration: none;
+}
+
+.pi-button:hover { background: var(--pi-paper); color: var(--pi-ink); }
+.pi-button:disabled { cursor: not-allowed; opacity: .42; }
+
+.pi-button-secondary {
+  background: var(--pi-paper);
+  color: var(--pi-ink);
+}
+
+.pi-button-secondary:hover { background: var(--pi-ink); color: var(--pi-paper); }
+
+@media (max-width: 700px) {
+  .pi-strip { flex-wrap: wrap; width: 100%; }
+  .pi-strip.is-offset { margin-left: 0; }
+  .pi-strip > .pi-cell {
+    flex: 1 1 min(100%, 12rem);
+    margin-left: calc(var(--pi-rule) * -1);
+    margin-top: calc(var(--pi-rule) * -1);
+    width: auto;
+  }
+  .pi-strip > .pi-cell:first-child { margin-left: 0; }
+}
+
+@media (max-width: 820px) {
+  .pi-uploader-grid {
+    grid-template-areas:
+      "brand"
+      "meta"
+      "workflow"
+      "drop"
+      "summary"
+      "queue"
+      "control"
+      "legend";
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pi-uploader-steps { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pi-cell { transform: none; }
+}
+
+.pi-print-only { display: none !important; }
+
+@page { margin: 12mm; }
+
+@media print {
+  :root {
+    --pi-rule: .45mm;
+    --pi-half-rule: .225mm;
+    --pi-magenta: device-cmyk(0% 100% 0% 0%, oklch(70.17% .3225 328.36));
+  }
+
+  html, body, .pi-paper {
+    background: var(--pi-paper) !important;
+    color: var(--pi-ink) !important;
+    min-width: 0 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .pi-ink,
+  .pi-frame::before,
+  .pi-blueprint-grid,
+  .pi-cell,
+  .pi-button {
+    filter: none !important;
+    text-shadow: none !important;
+  }
+
+  .pi-blueprint-grid {
+    gap: var(--pi-rule);
+    padding: var(--pi-rule);
+  }
+
+  .pi-frame,
+  .pi-avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .pi-no-print { display: none !important; }
+  .pi-print-only { display: initial !important; }
+}
