@@ -40,7 +40,7 @@ def validated_manifest(proposal,count):
   tasks=[]
   for task_index,t in enumerate(group['tasks'],1):
    tree=t['expression'];answer=evaluate(tree);maximum=t.get('max_points',3)
-   if maximum not in [3,4]:raise ValueError('Zadanie musi mieć 3 lub 4 punkty')
+   if isinstance(maximum,bool) or not isinstance(maximum,int) or maximum not in [3,4]:raise ValueError('Zadanie musi mieć 3 lub 4 punkty')
    if answer.denominator!=1 and abs(answer)<1:raise ValueError(f'Grupa {index}, zadanie {task_index}: dokładny wynik {answer} jest ułamkiem właściwym. Zmień liczby tak, aby wynik był całkowity lub miał część całkowitą co najmniej 1.')
    if abs(answer)>20 or answer.denominator>12:raise ValueError('Wynik jest zbyt złożony dla tej kartkówki')
    signature=json.dumps(tree,sort_keys=True)

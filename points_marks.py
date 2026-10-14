@@ -3,7 +3,6 @@ import math,io,json
 import numpy as np
 from PIL import Image,ImageDraw
 W,H=595.2756,420.9449
-CHECKBOX=[246,H-25,254,H-17]
 def geometry(index,maximum=3):
  cy=147+index*99;x,y=52,cy+12
  if maximum==3:
@@ -37,7 +36,7 @@ def detect(image,tasks):
    else:point=0;uncertain=True
    total+=point
   for polygon in mark.get('fraction_polygons_pt',[]):
-   poly=np.array(polygon)*scale;inside=_mask((h,w),poly,max(2,round(w/W*.6)));ratio=float(dark[inside].mean()) if inside.any() else 0
+   poly=np.array(polygon)*scale;inside=_mask((h,w),poly,max(2,round(w/W*1.0)));ratio=float(dark[inside].mean()) if inside.any() else 0
    if ratio<=.12:point=0
    elif ratio>=.75:point=.25
    else:point=0;uncertain=True

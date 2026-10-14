@@ -25,3 +25,5 @@ seed-sandbox.py
 README-papers.md
 test_papers.py
 test_points_marks.py
+
+paperless-send-pending

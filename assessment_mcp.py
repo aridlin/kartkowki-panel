@@ -1,6 +1,6 @@
 """Authenticated by the existing SSH transport; no public MCP listener."""
 import sys,json,base64
-from paper_workflow import db,init,grade_scan,safe_file,clone_quiz,start_author,publish_author
+from paper_workflow import db,init,grade_scan,safe_file,clone_quiz,start_author,publish_author,latest_scan
 from paper_authoring import available_models
 init()
 TOOLS=[{'name':'list_assessments','description':'List stored classroom assessments and their classes.','inputSchema':{'type':'object','properties':{},'additionalProperties':False}}, {'name':'get_coded_work','description':'Read the stored key, assignment, evaluation and latest scan for one full barcode.','inputSchema':{'type':'object','properties':{'barcode':{'type':'string'}},'required':['barcode'],'additionalProperties':False}}, {'name':'grade_scanned_work','description':'Evaluate one cropped scan with the server Codex OAuth account and persist points, grade and description.','inputSchema':{'type':'object','properties':{'scan_id':{'type':'integer'}},'required':['scan_id'],'additionalProperties':False}}]
@@ -34,8 +34,9 @@ def call(name,args):
    work=c.execute('SELECT * FROM paper_variants WHERE barcode=?',(args['barcode'],)).fetchone()
    if not work:raise ValueError('Unknown barcode')
    assignment=c.execute('SELECT * FROM paper_assignments WHERE barcode=?',(args['barcode'],)).fetchone()
-   scan=c.execute('SELECT * FROM paper_scans WHERE barcode=? ORDER BY id DESC LIMIT 1',(args['barcode'],)).fetchone()
-  blocks=[{'type':'text','text':json.dumps({'work':dict(work),'assignment':dict(assignment) if assignment else None,'scan':dict(scan) if scan else None},ensure_ascii=False)}]
+   scan=latest_scan(c,args['barcode'])
+   history=[dict(r) for r in c.execute('SELECT id,received_at,status,points,maximum,grade FROM paper_scans WHERE barcode=? ORDER BY received_at DESC,occurrence DESC,id DESC',(args['barcode'],))]
+  blocks=[{'type':'text','text':json.dumps({'work':dict(work),'assignment':dict(assignment) if assignment else None,'scan':dict(scan) if scan else None,'scan_history':history},ensure_ascii=False)}]
   if scan:blocks.append({'type':'image','mimeType':'image/png','data':base64.b64encode(safe_file(scan['crop_path']).read_bytes()).decode()})
   return blocks
  if name=='grade_scanned_work':return [{'type':'text','text':json.dumps(grade_scan(int(args['scan_id'])),ensure_ascii=False)}]

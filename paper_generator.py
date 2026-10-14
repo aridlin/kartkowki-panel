@@ -133,7 +133,10 @@ def box(t,s=13):
    a.draw(c,x+(w-a.w)/2,y+7+a.h/2);b.draw(c,x+(w-b.w)/2,y-7-b.h/2)
    c.setLineWidth(.85);c.line(x,y,x+w,y)
   return Box(w,h,draw)
- a,b=box(t['a'],s),box(t['b'],s);op={'sub':'−','add':'+','mul':'·'}[t['op']];gap=s*.6;ow=pdfmetrics.stringWidth(op,'DV',s)
+ def printable(child,side):
+  op=child['op'];wrap=(t['op']=='mul' and op in ['add','sub']) or (t['op']=='sub' and side=='right' and op in ['add','sub']) or (side=='right' and t['op'] in ['add','sub','mul'] and op=='value' and child['n']<0)
+  return {'op':'paren','a':child} if wrap else child
+ a,b=box(printable(t['a'],'left'),s),box(printable(t['b'],'right'),s);op={'sub':'−','add':'+','mul':'·'}[t['op']];gap=s*.6;ow=pdfmetrics.stringWidth(op,'DV',s)
  def draw(c,x,y):
   a.draw(c,x,y);c.setFont('DV',s);c.drawString(x+a.w+gap,y-s*.33,op);b.draw(c,x+a.w+gap+ow+gap,y)
  return Box(a.w+b.w+ow+2*gap,max(a.h,b.h),draw)
@@ -162,7 +165,9 @@ def draw_work(c,g,top):
   center=147+i*99
   c.setFont('DVB',11);c.drawString(55,yy(center+4),f'{i+1}.')
   eq=box(task['expression'],13.5)
-  if eq.w>165:eq=box(task['expression'],13.5*165/eq.w)
+  factor=min(1,165/eq.w,79/eq.h)
+  if factor<1:eq=box(task['expression'],13.5*factor)
+  if 13.5*factor<9:raise ValueError('Wyrażenie jest zbyt duże do czytelnego wydruku')
   assert eq.w<=205,eq.w
   eq.draw(c,110+(170-eq.w)/2,yy(center))
   grid(c,292,yy(center-40),244,79)

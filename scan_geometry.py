@@ -37,6 +37,6 @@ def crop_works(image,dpi=220):
   scale=dpi/72;target=np.float32([[MARGIN,MARGIN],[W-MARGIN,MARGIN],[W-MARGIN,H-MARGIN],[MARGIN,H-MARGIN]])*scale
   transform=cv2.getPerspectiveTransform(src,target)
   crop=cv2.warpPerspective(image,transform,(round(W*scale),round(H*scale)),borderValue=(255,255,255))
-  out.append({'group':group,'image':crop,'marker_ids':[4*(group-1)+i for i in range(4)]})
+  out.append({'group':group,'position':(float(center[1]),float(center[0])),'image':crop,'marker_ids':[4*(group-1)+i for i in range(4)]})
  if len(used)!=len(entries):raise ValueError("Some corner markers could not be paired; preserve the original scan")
- return out
+ return sorted(out,key=lambda work:work['position'])

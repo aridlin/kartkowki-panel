@@ -11,7 +11,7 @@ Self-hosted Polish classroom assessment panel: printable clean worksheets, answe
 5. Scan papers. The worker decodes codes, rectifies each work, and reads names and mathematical steps with the selected Codex model. Unknown pupils, unclear marks and failed imports remain available for review.
 6. Scan a barcode in the summary field: **grade → points → pupil → assessment**. The field stays ready for the next scan. Copy a password-in-link URL for the teacher to paste into a Librus grade comment.
 
-Three-point tasks have a triangle divided into three segments; four-point tasks have a square divided into four segments. Each main segment is one point. An adjacent small square has four quarter-point segments: two main segments plus two small segments means 2.5 points. Per-task website corrections use 0.25 increments and update the figures on a graded copy; originals remain intact. Empty figures alone do not establish a completed manual zero grade. Use the upload option **Odczytaj ręczne punkty (także 0)** when importing a manually scored all-zero paper. Ambiguous fills require teacher review.
+Three-point tasks have a triangle divided into three segments; four-point tasks have a square divided into four segments. Each main segment is one point. An adjacent small square has four quarter-point segments: two main segments plus two small segments means 2.5 points. Per-task website corrections use 0.25 increments and update the figures on a graded copy; originals remain intact. Choose **Tryb przycisku Send** to distinguish Codex grading of written solutions from trusted teacher point-mark reading. In Codex mode, pre-existing point figures do not override mathematical grading. Empty figures alone do not establish a completed manual zero grade. Use the upload option **Odczytaj ręczne punkty (także 0)** when importing a manually scored all-zero paper. Ambiguous fills require teacher review.
 
 Dark, light and system themes are available and saved in the browser. Generation, scan review, class mapping and scanner summary are separate actions.
 
@@ -68,3 +68,5 @@ Back up SQLite and files before deployment. Verify rendered PDFs, arithmetic, al
 python test_school_grading.py
 python -m unittest discover -s tests
 ```
+
+Repeated barcodes are rescan versions, including repeated works within one uploaded PDF. All originals, evaluations and corrections remain available in the version selector; summaries and pupil links show the newest received version. Editing an older version does not change the order. A new upload is a new capture even if bytes are identical. Scanner integrations should send a stable `X-Scan-Id` for retries of one capture, and a fresh ID for each physical scan; a reused ID with different bytes is rejected. Revoking a work link revokes all earlier link tokens for that work.
