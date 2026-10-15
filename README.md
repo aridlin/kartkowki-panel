@@ -72,3 +72,22 @@ python -m unittest discover -s tests
 Repeated barcodes are rescan versions, including repeated works within one uploaded PDF. All originals, evaluations and corrections remain available in the version selector; summaries and pupil links show the newest received version. Editing an older version does not change the order. A new upload is a new capture even if bytes are identical. Scanner integrations should send a stable `X-Scan-Id` for retries of one capture, and a fresh ID for each physical scan; a reused ID with different bytes is rejected. Revoking a work link revokes all earlier link tokens for that work.
 
 Scan rectification preserves the whole A5 area (about 8.5 mm beyond the corner markers) and stores a second view with another 12 pt / 4.2 mm of context from the input scan. Codex, work previews and shared work images use that wider view. Point reading uses the original canonical A5 coordinates; overlays are placed inside the stored content frame. Teachers can open the untouched job source through the authenticated `/papers/scan/<id>/source` route. The shared pupil URL never grants access to the whole source document. Existing scans keep working without regeneration; a new rescan receives the wider view. No image can recover writing absent from the original scan.
+
+## Reproducible future worksheets
+
+Future randomized quizzes use a frozen deterministic generator. Codex designs three expression templates, explicit number domains and criteria (for example **the answer must be an integer**); Python draws all numeric values from a seed, rejects division by zero and checks those criteria using exact fractions. An LLM is never needed to replay a printed work. Choose **Nowe liczby losowane z seed i kryteriów** for new randomized data, or **Dokładna korekta wybranych zadań** to preserve specifically approved questions. Exact corrections and class clones freeze their approved values rather than randomizing them again.
+
+The 32-digit Code128 format is `GGG | 9101 | RRRRRRRRRRRRR | SSSSSSSSSS | CC`: three-digit group, protocol v1, a 40-bit source-recipe identifier, a 32-bit seed and a mod-97 typo checksum. Criteria are **in the shared source recipe, not in the barcode**. The numeric format keeps the printed code within the existing 235 pt area at the same 1 pt module width. The recipe ID is an identifier, not a recoverable encoding of its criteria; the barcode is not a password. Old 15-character codes retain their database lookup behavior and are never rewritten.
+
+Download **Generator z kryteriami ZIP** for each new bundle and retain/share that original source package. It includes `recipe.json`, frozen v1 generator/rendering code, exact Python dependency versions, bundled DejaVu fonts and SHA-256 file checks. It contains no pupil roster, scans, grades or OAuth credentials. With that package and one barcode, restore the original clean A5 work and answer key offline:
+
+```sh
+python -m pip install -r requirements.txt
+python seeded_generator.py SCANNED_BARCODE --render --output restored
+```
+
+The restored `Arkusz.pdf` keeps the original barcode. Neither a quiz database, an AI model nor a network connection is used during reconstruction. Retain the original package when updating generators: a new format must get a new version. A mismatched recipe, changed source-package file or damaged barcode fails explicitly. The public repository contains an example in `examples/seeded_integer_recipe_v1.json`; pass it with `--recipe` when using the repository directly. Other quizzes require their own original source recipe/package, not this example.
+
+The teacher panel can also reconstruct a code using its source-file registry at `/papers/recreate/<barcode>.pdf`; this operation does not consult quiz DB rows. Unknown seed codes in the scanner field offer that recovery link. `recreate_clean_work` exposes the same operation to Codex through MCP. The registry and source ZIP are preserved with assessment files. Existing worksheets and their codes/keys remain unchanged.
+
+Tests require Poppler (`pdftoppm`), zbar (`zbarimg`) and DejaVu fonts in addition to Python requirements. The round-trip test unpacks only the original code package, sets an unusable DB location, renders offline, verifies matching tasks and barcodes, and rejects a modified recipe.

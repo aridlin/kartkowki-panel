@@ -24,7 +24,7 @@ class RescanTests(unittest.TestCase):
     first,second=[s['scan_id'] for s in scans];client=app.APP.test_client()
     self.assertEqual(client.get(f'/papers/scan/{first}/source').status_code,302)
     with client.session_transaction() as session:session['teacher']=True
-    self.assertEqual(client.get(f'/papers/scan/{first}/source').data,raw)
+    with client.get(f'/papers/scan/{first}/source') as response:self.assertEqual(response.data,raw)
     link=client.post(f'/api/papers/scans/{first}/share').json['url'];url=urlsplit(link)
     self.assertEqual(link,client.post(f'/api/papers/scans/{second}/share').json['url'])
     new_job=p.enqueue(raw);self.assertNotEqual(first_job['id'],new_job['id'])

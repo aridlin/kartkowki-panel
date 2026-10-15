@@ -1,18 +1,21 @@
 """Authenticated by the existing SSH transport; no public MCP listener."""
 import sys,json,base64
-from paper_workflow import db,init,grade_scan,safe_file,clone_quiz,start_author,publish_author,latest_scan
+from paper_workflow import db,init,grade_scan,safe_file,clone_quiz,start_author,publish_author,latest_scan,regenerate_work
 from paper_authoring import available_models
 init()
 TOOLS=[{'name':'list_assessments','description':'List stored classroom assessments and their classes.','inputSchema':{'type':'object','properties':{},'additionalProperties':False}}, {'name':'get_coded_work','description':'Read the stored key, assignment, evaluation and latest scan for one full barcode.','inputSchema':{'type':'object','properties':{'barcode':{'type':'string'}},'required':['barcode'],'additionalProperties':False}}, {'name':'grade_scanned_work','description':'Evaluate one cropped scan with the server Codex OAuth account and persist points, grade and description.','inputSchema':{'type':'object','properties':{'scan_id':{'type':'integer'}},'required':['scan_id'],'additionalProperties':False}}]
 TOOLS += [
+ {'name':'recreate_clean_work','description':'Recreate a clean work from its seed barcode and original source recipe, without a quiz database or model call. Returns the teacher download path.','inputSchema':{'type':'object','properties':{'barcode':{'type':'string'}},'required':['barcode'],'additionalProperties':False}},
  {'name':'list_models','description':'List models available in the server Codex OAuth session.','inputSchema':{'type':'object','properties':{},'additionalProperties':False}},
  {'name':'get_quiz_manifest','description':'Read exact expressions, keys, point figures and grading policy for one assessment.','inputSchema':{'type':'object','properties':{'quiz_id':{'type':'string'}},'required':['quiz_id'],'additionalProperties':False}},
  {'name':'clone_quiz_for_class','description':'Create a new clean bundle with fresh codes for another class; preserve the source questions.','inputSchema':{'type':'object','properties':{'quiz_id':{'type':'string'},'class_name':{'type':'string'},'profile':{'type':'string','enum':['sp263','zs33-tech','zs33-bs']},'count':{'type':'integer'},'title':{'type':'string'},'students':{'type':'array','items':{'type':'string'}}},'required':['quiz_id','class_name','profile'],'additionalProperties':False}},
- {'name':'propose_quiz','description':'Queue a new or corrected Codex draft. Keys are independently verified and this does not publish student work.','inputSchema':{'type':'object','properties':{'instructions':{'type':'string'},'count':{'type':'integer'},'model':{'type':'string'},'source_quiz_id':{'type':'string'},'source_draft_id':{'type':'string'}},'required':['instructions','count'],'additionalProperties':False}},
+ {'name':'propose_quiz','description':'Queue a new or corrected Codex draft. Keys are independently verified and this does not publish student work.','inputSchema':{'type':'object','properties':{'instructions':{'type':'string'},'count':{'type':'integer'},'model':{'type':'string'},'source_quiz_id':{'type':'string'},'source_draft_id':{'type':'string'},'randomize':{'type':'boolean'}},'required':['instructions','count'],'additionalProperties':False}},
  {'name':'get_quiz_draft','description':'Read the status, generated expressions and exact answer key of a queued draft.','inputSchema':{'type':'object','properties':{'job_id':{'type':'string'}},'required':['job_id'],'additionalProperties':False}},
  {'name':'publish_quiz_draft','description':'Publish a verified draft as a new clean bundle for a class, with fresh work codes.','inputSchema':{'type':'object','properties':{'job_id':{'type':'string'},'class_name':{'type':'string'},'profile':{'type':'string','enum':['sp263','zs33-tech','zs33-bs']},'students':{'type':'array','items':{'type':'string'}}},'required':['job_id','class_name','profile'],'additionalProperties':False}},
 ]
 def call(name,args):
+ if name=='recreate_clean_work':
+  path=regenerate_work(args['barcode']);return [{'type':'text','text':json.dumps({'path':str(path),'teacher_download_path':'papers/recreate/'+args['barcode']+'.pdf','database_required':False,'ai_required':False})}]
  if name=='list_models':return [{'type':'text','text':json.dumps(available_models())}]
  if name=='get_quiz_manifest':
   with db() as c:row=c.execute('SELECT * FROM paper_quizzes WHERE id=?',(args['quiz_id'],)).fetchone()

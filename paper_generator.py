@@ -1,7 +1,7 @@
 from pathlib import Path
 from fractions import Fraction as F
-import json,uuid,random,csv,sys,os
-sys.path.insert(0,'/tmp/quiz-aruco')
+import json,uuid,random,csv,sys,os,secrets
+from seeded_generator import manifest as seeded_manifest,default_recipe,fixed_manifest,verify_manifest
 import cv2
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from points_marks import geometry
@@ -19,7 +19,7 @@ OUT=Path(os.environ.get('QUIZ_OUT',str(OUT)))
 OUT.mkdir(exist_ok=True,parents=True)
 META=OUT/'zadania_i_kody.json'
 for name,path in [('DV','DejaVuSans.ttf'),('DVB','DejaVuSans-Bold.ttf')]:
- font=next((base/path for base in [Path('/usr/share/fonts/TTF'),Path('/usr/share/fonts/truetype/dejavu')] if (base/path).exists()),None)
+ font=next((base/path for base in [Path(__file__).resolve().parent/'fonts',Path('/usr/share/fonts/TTF'),Path('/usr/share/fonts/truetype/dejavu')] if (base/path).exists()),None)
  if font is None:raise RuntimeError('Missing DejaVu font')
  pdfmetrics.registerFont(TTFont(name,str(font)))
 W,H=595.2756,841.8898;HH=H/2;M=22;MX,MY=24,24
@@ -82,19 +82,14 @@ if os.environ.get('QUIZ_TEMPLATE'):
  for number,g in enumerate(data['groups'],1):g['group']=number;g['marker_ids']=list(range((number-1)*4,number*4))
 elif META.exists():data=json.loads(META.read_text())
 else:
- uid=uuid.uuid4().hex;token=uid[:12].upper()
- data={'schema_version':1,'quiz_id':uid,'title':'Kartkówka z ułamków zwykłych','created_date':'2026-10-14','barcode_format':'CODE128','aruco_dictionary':'DICT_5X5_250','marker_size_pt':M,'page_width_pt':W,'work_height_pt':HH,'marker_outer_corner_points_pt':[[MX,MY],[W-MX,MY],[W-MX,HH-MY],[MX,HH-MY]],'groups':[]}
- for g in range(1,COUNT+1):
-  tasks=[]
-  types=[('f',False),('g',g%2==0),('h',g%2==1)] if SET==1 else [('g2',g%2==0),('h2',g%2==1),('i2',g%3==0)]
-  for kind,integer in types:
-   t,q=generate(kind,integer)
-   tasks.append({'source_type':kind,'expression':t,'expression_text':plain(t),'answer_numerator':q.numerator,'answer_denominator':q.denominator,'answer_mixed':fmt(q)})
-  data['groups'].append({'group':g,'submission_id':f'{g:03d}{token}','barcode_value':f'{g:03d}{token}','marker_ids':list(range((g-1)*4,g*4)),'tasks':tasks})
- META.write_text(json.dumps(data,ensure_ascii=False,indent=2))
+ recipe=default_recipe(SET,COUNT,os.environ.get('QUIZ_ANSWER_KIND','mixed_or_integer'))
+ recipe['title']=os.environ.get('QUIZ_TITLE',recipe['title']);recipe['is_test']=os.environ.get('KARTKOWKI_SANDBOX')=='1'
+ data=seeded_manifest(recipe,int(os.environ['QUIZ_SEED']) if 'QUIZ_SEED' in os.environ else secrets.randbelow(2**32))
 # Preserve the quiz identity while changing barcode prefix to the requested group code.
-for g in data['groups']:
- g['barcode_value']=g['submission_id']=f"{g['group']:03d}{data['quiz_id'][:12].upper()}"
+if os.environ.get('QUIZ_TEMPLATE'):data=fixed_manifest(data)
+verify_manifest(data)
+if not data.get('generation'):
+ for g in data['groups']:g['barcode_value']=g['submission_id']=f"{g['group']:03d}{data['quiz_id'][:12].upper()}"
 data['set_number']=SET
 data['is_test']=data.get('is_test',os.environ.get('KARTKOWKI_SANDBOX')=='1' or data.get('title','').startswith('TEST'))
 data['layout_revision']='points-shapes-quarters-v2';data.pop('manual_grading_checkbox_pt',None)
@@ -102,6 +97,7 @@ for g in data['groups']:
  for index,task in enumerate(g['tasks']):task['max_points']=task.get('max_points',3);task['grading_mark']=geometry(index,task['max_points'])
 data['title']=os.environ.get('QUIZ_TITLE','Kartkówka z ułamków zwykłych'+(' i nawiasów' if SET==2 else ''))
 META.write_text(json.dumps(data,ensure_ascii=False,indent=2))
+if data.get('generation'):(OUT/'recipe.json').write_text(json.dumps(data['generation']['recipe'],ensure_ascii=False,indent=2))
 class Box:
  def __init__(self,w,h,draw):self.w,self.h,self.draw=w,h,draw
 
@@ -160,7 +156,7 @@ def draw_work(c,g,top):
  c.setFont('DV',7.4);c.drawCentredString(bx+b.width/2,yy(61),g['barcode_value'])
  c.setFont('DV',9.5);c.drawString(58,yy(79),'Nazwisko i imię:');c.setLineWidth(.5);c.line(141,yy(81),365,yy(81))
  c.drawString(378,yy(79),'Klasa:');c.line(410,yy(81),450,yy(81));c.drawString(465,yy(79),'Ocena:');c.line(501,yy(81),537,yy(81))
- c.setFont('DV',9);c.drawString(58,yy(98),'Oblicz. Wyniki zapisz jako liczby całkowite lub liczby mieszane.')
+ c.setFont('DV',9);c.drawString(58,yy(98),data.get('instruction','Oblicz. Wyniki zapisz jako liczby całkowite lub liczby mieszane.'))
  for i,task in enumerate(g['tasks']):
   center=147+i*99
   c.setFont('DVB',11);c.drawString(55,yy(center+4),f'{i+1}.')
@@ -180,7 +176,7 @@ def draw_work(c,g,top):
   c.setFont('DV',6.5);c.drawString(54,yy(center+46),f"/{task['max_points']} pkt")
 
 
-c=canvas.Canvas(str(OUT/'Kartkowka_ulamki_30_grup.pdf'),pagesize=(W,H))
+c=canvas.Canvas(str(OUT/'Kartkowka_ulamki_30_grup.pdf'),pagesize=(W,H),invariant=bool(data.get('generation')))
 c.setTitle(f'{data["title"]} · {COUNT} grup')
 for page in range((COUNT+1)//2):
  draw_work(c,data['groups'][2*page],H)
@@ -189,7 +185,7 @@ for page in range((COUNT+1)//2):
  c.showPage()
 c.save()
 # Matching compact answer key.
-k=canvas.Canvas(str(OUT/'Klucz_odpowiedzi.pdf'),pagesize=(W,H));k.setTitle('Klucz odpowiedzi kartkówka z ułamków')
+k=canvas.Canvas(str(OUT/'Klucz_odpowiedzi.pdf'),pagesize=(W,H),invariant=bool(data.get('generation')));k.setTitle('Klucz odpowiedzi kartkówka z ułamków')
 k.setFont('DVB',14);k.drawString(35,H-38,f'Klucz odpowiedzi · {COUNT} grup')
 k.setFont('DV',8);k.drawString(35,H-54,'Kartkówka z ułamków · zadania typu '+('f, g, h' if SET==1 else 'g, h, i'))
 cols=[35,90,178,266,364];heads=['Grupa','Zadanie 1','Zadanie 2','Zadanie 3','Kod pracy']
@@ -211,4 +207,4 @@ assert len(PdfReader(OUT/'Kartkowka_ulamki_30_grup.pdf').pages)==(COUNT+1)//2
 assert len(PdfReader(OUT/'Klucz_odpowiedzi.pdf').pages)==1
 assert len({g['barcode_value'] for g in data['groups']})==COUNT
 assert all(len(g['tasks'])==3 for g in data['groups'])
-print(f'Created {COUNT//2} pages, {COUNT} groups, {COUNT*3} tasks')
+print(f'Created {(COUNT+1)//2} pages, {COUNT} groups, {COUNT*3} tasks')

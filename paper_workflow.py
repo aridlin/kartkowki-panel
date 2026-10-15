@@ -6,7 +6,8 @@ from contextlib import contextmanager
 from difflib import SequenceMatcher
 from flask import request,jsonify,send_file,abort,render_template,url_for
 from PIL import Image
-from paper_authoring import available_models,check_model,render_bundle
+from paper_authoring import available_models,check_model,render_bundle,export_generator
+from seeded_generator import fixed_manifest,verify_manifest,decode as decode_seed,reconstruct as reconstruct_seed,recipe_id,recipe_hash
 from grade_rules import PROFILES,class_profile,school_grade
 DATA=Path(os.environ.get('KARTKOWKI_DATA',Path(__file__).parent/'data')).resolve();DB=DATA/'kartkowki.sqlite3'
 FILES=DATA/'papers';FILES.mkdir(parents=True,exist_ok=True)
@@ -91,9 +92,15 @@ def safe_file(rel):
 
 def import_bundle(folder):
  from pypdf import PdfReader,PdfWriter
- folder=Path(folder);meta=json.loads((folder/'zadania_i_kody.json').read_text());qid=meta['quiz_id'];dest=FILES/qid;dest.mkdir(exist_ok=True)
+ folder=Path(folder);meta=json.loads((folder/'zadania_i_kody.json').read_text());verify_manifest(meta);qid=meta['quiz_id'];dest=FILES/qid;dest.mkdir(exist_ok=True)
+ if meta.get('generation'):
+  recipe=meta['generation']['recipe'];registry=FILES/'recipes';registry.mkdir(exist_ok=True);target=registry/f'{recipe_id(recipe):013d}.json'
+  if target.exists() and recipe_hash(json.loads(target.read_text()))!=recipe_hash(recipe):raise ValueError('Kolizja identyfikatora generatora; utwórz nową edycję')
+  target.write_text(json.dumps(recipe,ensure_ascii=False));export_generator(meta,folder)
  import shutil
  for source,target in [('Kartkowka_ulamki_30_grup.pdf','blank.pdf'),('Klucz_odpowiedzi.pdf','key.pdf'),('zadania_i_kody.json','manifest.json')]:shutil.copyfile(folder/source,dest/target)
+ if meta.get('generation'):
+  shutil.copyfile(folder/'Generator_z_kryteriami.zip',dest/'generator.zip');shutil.copyfile(folder/'recipe.json',dest/'recipe.json')
  reader=PdfReader(dest/'blank.pdf')
  with db() as c:
   c.execute('INSERT INTO paper_quizzes(id,title,manifest,pdf_path,key_path,created) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,manifest=excluded.manifest,pdf_path=excluded.pdf_path,key_path=excluded.key_path',(qid,meta['title'],json.dumps(meta,ensure_ascii=False),str((dest/'blank.pdf').relative_to(DATA)),str((dest/'key.pdf').relative_to(DATA)),now()))
@@ -313,6 +320,20 @@ def scan_response(sid,original=False):
   except (KeyError,StopIteration,ValueError):pass
  return send_file(path,mimetype='image/png',conditional=False)
 
+def regenerate_work(code):
+ fields=decode_seed(code);source=FILES/'recipes'/f"{fields['recipe_id']:013d}.json"
+ if not source.is_file():raise ValueError('Brak oryginalnego generatora. Użyj pakietu Generator z kryteriami dla tej kartkówki.')
+ recipe=json.loads(source.read_text());meta=reconstruct_seed(code,recipe);folder=FILES/'reconstructed'/code;folder.mkdir(parents=True,exist_ok=True)
+ with (folder/'render.lock').open('a') as lock:
+  fcntl.flock(lock,fcntl.LOCK_EX)
+  target=folder/'Arkusz.pdf'
+  if not target.exists():
+   from pypdf import PdfReader,PdfWriter
+   render_bundle(meta,folder);page=PdfReader(folder/'Kartkowka_ulamki_30_grup.pdf').pages[0];page.mediabox.lower_left=(0,float(page.mediabox.height)/2);page.cropbox=page.mediabox
+   writer=PdfWriter();writer.add_page(page)
+   with target.open('wb') as output:writer.write(output)
+ return target
+
 def ensure_class(c,body):
  name=str(body.get('class_name','')).strip()[:100]
  if not name:raise ValueError('Wybierz lub wpisz nazwę klasy')
@@ -335,8 +356,8 @@ def clone_quiz(qid,body):
  if not source:raise ValueError('Nieznany zestaw źródłowy')
  meta=deepcopy(json.loads(source[0]));count=int(body.get('count',len(meta['groups'])))
  if not 1<=count<=len(meta['groups']):raise ValueError('Liczba grup przekracza zestaw źródłowy')
- uid=secrets.token_hex(16);meta['quiz_id']=uid;meta['parent_quiz_id']=qid;meta['groups']=meta['groups'][:count];meta['title']=str(body.get('title') or meta['title'])[:160]
- for index,g in enumerate(meta['groups'],1):g['group']=index;g['marker_ids']=list(range((index-1)*4,index*4));g['barcode_value']=g['submission_id']=f'{index:03d}{uid[:12].upper()}'
+ meta['parent_quiz_id']=qid;meta['groups']=meta['groups'][:count];meta['title']=str(body.get('title') or meta['title'])[:160]
+ meta=fixed_manifest(meta);uid=meta['quiz_id']
  with db() as c:name,profile=ensure_class(c,body)
  folder=FILES/'generated'/uid;render_bundle(meta,folder);new_id=import_bundle(folder)
  with db() as c:c.execute('UPDATE paper_quizzes SET class_name=?,grading_profile=? WHERE id=?',(name,profile,new_id));audit(c,'clone_quiz',None,{'source':qid,'quiz_id':new_id,'class_name':name})
@@ -355,7 +376,9 @@ def start_author(body):
    source=c.execute('SELECT manifest FROM paper_quizzes WHERE id=?',(source_id,)).fetchone()
    if not source:raise ValueError('Nieznany zestaw do poprawy')
    template=json.loads(source[0])
-  jid=secrets.token_hex(12);spec={'count':count,'instructions':instructions,'model':model,'source_quiz_id':source_id,'source_draft_id':draft_id,'template':template}
+  randomize=body.get('randomize',not bool(draft_id))
+  if not isinstance(randomize,bool):raise ValueError('Wybierz losowanie nowych danych albo korektę istniejących zadań')
+  jid=secrets.token_hex(12);spec={'randomize':randomize,'count':count,'instructions':instructions,'model':model,'source_quiz_id':source_id,'source_draft_id':draft_id,'template':template}
   c.execute('INSERT INTO paper_author_jobs(id,status,request,updated) VALUES(?,?,?,?)',(jid,'queued',json.dumps(spec,ensure_ascii=False),now()))
  return {'id':jid,'status':'queued'}
 
@@ -403,7 +426,7 @@ def register(app,teacher):
   for w in works:w['tasks']=json.loads(w['tasks'])
   for s in scans:
    s['evaluation']=json.loads(s['evaluation']);versions=[v for v in scans if v['barcode']==s['barcode']];s['version']=len(versions)-versions.index(s);s['version_count']=len(versions);s['is_latest']=s['id']==versions[0]['id']
-  return jsonify(quiz={'id':qid,'title':quiz['title'],'class_name':quiz['class_name'],'grading_profile':profile,'grading_override':quiz['grading_profile'],'grading':grading,'bonus_maximum':bonus_max,'codex_model':quiz['codex_model']},works=works,roster=roster,scans=scans)
+  return jsonify(quiz={'id':qid,'title':quiz['title'],'class_name':quiz['class_name'],'grading_profile':profile,'grading_override':quiz['grading_profile'],'grading':grading,'bonus_maximum':bonus_max,'codex_model':quiz['codex_model'],'seeded':bool(json.loads(quiz['manifest']).get('generation'))},works=works,roster=roster,scans=scans)
  @app.post('/api/papers/<qid>/class')
  @teacher
  def paper_class(qid):
@@ -516,6 +539,19 @@ def register(app,teacher):
   with db() as c:row=c.execute('SELECT * FROM paper_quizzes WHERE id=?',(qid,)).fetchone()
   if not row:abort(404)
   return send_file(safe_file(row['pdf_path'] if kind=='blank' else row['key_path']),mimetype='application/pdf')
+ @app.get('/papers/<qid>/generator.zip')
+ @teacher
+ def paper_generator_source(qid):
+  if not re.fullmatch(r'[a-f0-9]{32}',qid):abort(404)
+  target=FILES/qid/'generator.zip'
+  if not target.is_file():abort(404)
+  return send_file(target,mimetype='application/zip',as_attachment=True,download_name='Generator_z_kryteriami.zip')
+ @app.get('/papers/recreate/<code>.pdf')
+ @teacher
+ def paper_recreate(code):
+  try:target=regenerate_work(code)
+  except ValueError as error:return jsonify(error=str(error)),400
+  return send_file(target,mimetype='application/pdf',download_name='Arkusz.pdf')
  @app.get('/papers/work/<code>.pdf')
  @teacher
  def paper_blank(code):
