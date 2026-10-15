@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 W,H=595.2756,841.8898/2
 MARGIN=24
+CONTEXT_MARGIN=12 # extra 4.2 mm beyond the whole A5 sheet, not just the markers
 DICT=cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_250)
 def crop_works(image,dpi=220):
  detector=cv2.aruco.ArucoDetector(DICT,cv2.aruco.DetectorParameters())
@@ -37,6 +38,9 @@ def crop_works(image,dpi=220):
   scale=dpi/72;target=np.float32([[MARGIN,MARGIN],[W-MARGIN,MARGIN],[W-MARGIN,H-MARGIN],[MARGIN,H-MARGIN]])*scale
   transform=cv2.getPerspectiveTransform(src,target)
   crop=cv2.warpPerspective(image,transform,(round(W*scale),round(H*scale)),borderValue=(255,255,255))
-  out.append({'group':group,'position':(float(center[1]),float(center[0])),'image':crop,'marker_ids':[4*(group-1)+i for i in range(4)]})
+  pad=round(CONTEXT_MARGIN*scale)
+  context_transform=np.array([[1,0,pad],[0,1,pad],[0,0,1]],dtype=np.float64) @ transform
+  context=cv2.warpPerspective(image,context_transform,(crop.shape[1]+2*pad,crop.shape[0]+2*pad),borderValue=(255,255,255))
+  out.append({'context_image':context,'content_frame':[pad,pad,crop.shape[1],crop.shape[0]],'group':group,'position':(float(center[1]),float(center[0])),'image':crop,'marker_ids':[4*(group-1)+i for i in range(4)]})
  if len(used)!=len(entries):raise ValueError("Some corner markers could not be paired; preserve the original scan")
  return sorted(out,key=lambda work:work['position'])

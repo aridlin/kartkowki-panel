@@ -22,7 +22,9 @@ class RescanTests(unittest.TestCase):
     with patch('scan_geometry.crop_works',return_value=parts),patch.object(p,'read_barcodes',return_value=[code]):
      scans=p.process_job(first_job['id']);self.assertEqual(len({s['scan_id'] for s in scans}),2);self.assertEqual(scans,p.process_job(first_job['id']))
     first,second=[s['scan_id'] for s in scans];client=app.APP.test_client()
+    self.assertEqual(client.get(f'/papers/scan/{first}/source').status_code,401)
     with client.session_transaction() as session:session['teacher']=True
+    self.assertEqual(client.get(f'/papers/scan/{first}/source').data,raw)
     link=client.post(f'/api/papers/scans/{first}/share').json['url'];url=urlsplit(link)
     self.assertEqual(link,client.post(f'/api/papers/scans/{second}/share').json['url'])
     new_job=p.enqueue(raw);self.assertNotEqual(first_job['id'],new_job['id'])

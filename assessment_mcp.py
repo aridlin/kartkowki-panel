@@ -37,7 +37,7 @@ def call(name,args):
    scan=latest_scan(c,args['barcode'])
    history=[dict(r) for r in c.execute('SELECT id,received_at,status,points,maximum,grade FROM paper_scans WHERE barcode=? ORDER BY received_at DESC,occurrence DESC,id DESC',(args['barcode'],))]
   blocks=[{'type':'text','text':json.dumps({'work':dict(work),'assignment':dict(assignment) if assignment else None,'scan':dict(scan) if scan else None,'scan_history':history},ensure_ascii=False)}]
-  if scan:blocks.append({'type':'image','mimeType':'image/png','data':base64.b64encode(safe_file(scan['crop_path']).read_bytes()).decode()})
+  if scan:blocks.append({'type':'image','mimeType':'image/png','data':base64.b64encode(safe_file(scan['context_path'] or scan['crop_path']).read_bytes()).decode()})
   return blocks
  if name=='grade_scanned_work':return [{'type':'text','text':json.dumps(grade_scan(int(args['scan_id'])),ensure_ascii=False)}]
  raise ValueError('Unknown tool')

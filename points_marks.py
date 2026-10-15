@@ -45,8 +45,14 @@ def detect(image,tasks):
   values.append({'points':total,'uncertain':uncertain})
  confirmed=bool(seen and (any(x['points']>0 for x in values) or any(x['uncertain'] for x in values)))
  return {'confirmed':confirmed,'present':seen,'points':values,'uncertain':confirmed and (not seen or any(v['uncertain'] for v in values))}
-def annotate(path,tasks,scores):
- im=Image.open(path).convert('RGB');layer=Image.new('RGBA',im.size);draw=ImageDraw.Draw(layer);sx,sy=im.width/W,im.height/H
+def annotate(path,tasks,scores,frame=None):
+ im=Image.open(path).convert('RGB')
+ if frame:
+  x,y,width,height=map(int,frame)
+  if x<0 or y<0 or width<=0 or height<=0 or x+width>im.width or y+height>im.height:raise ValueError('Invalid scan content frame')
+  core=io.BytesIO();im.crop((x,y,x+width,y+height)).save(core,format='PNG');core.seek(0)
+  marked=Image.open(io.BytesIO(annotate(core,tasks,scores))).convert('RGB');im.paste(marked,(x,y));out=io.BytesIO();im.save(out,format='PNG');return out.getvalue()
+ layer=Image.new('RGBA',im.size);draw=ImageDraw.Draw(layer);sx,sy=im.width/W,im.height/H
  for task,score in zip(tasks,scores):
   whole=int(float(score));quarters=round((float(score)-whole)*4)
   polygons=task.get('grading_mark',{}).get('polygons_pt',[])[:whole]+task.get('grading_mark',{}).get('fraction_polygons_pt',[])[:quarters]
