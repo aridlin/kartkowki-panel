@@ -30,7 +30,8 @@ while True:
    with db() as c:scan=c.execute("SELECT id FROM paper_scans WHERE status='waiting_auth' ORDER BY id LIMIT 1").fetchone()
    if scan:
     try:grade_scan(scan['id'])
-    except Exception:
-     with db() as c:c.execute('UPDATE paper_scans SET status=?,description=?,updated=? WHERE id=?',('needs_review','Automatyczna ocena nie powiodła się. Sprawdź stan OAuth i ponów ocenianie.',now(),scan['id']))
+    except Exception as exc:
+     print('Grading error:',scan['id'],type(exc).__name__,str(exc)[:500],flush=True)
+     with db() as c:c.execute('UPDATE paper_scans SET status=?,description=?,updated=? WHERE id=?',('needs_review','Automatyczna ocena nie powiodła się: '+(str(exc)[:300] if isinstance(exc,ValueError) else type(exc).__name__)+'. Oryginał zachowano; można ponowić ocenianie.',now(),scan['id']))
   time.sleep(2)
  except Exception as e:print('Worker error:',type(e).__name__,flush=True);time.sleep(5)

@@ -179,51 +179,62 @@ def read_barcodes(path):
  p=subprocess.run(['zbarimg','--quiet','--raw',str(path)],capture_output=True,text=True,timeout=25)
  return list(dict.fromkeys(x.strip() for x in p.stdout.splitlines() if x.strip()))
 
-def process_job(jid):
+def process_job(jid,refresh_existing=False):
  import cv2
  from scan_geometry import crop_works
  with db() as c:
   row=c.execute('SELECT * FROM paper_jobs WHERE id=?',(jid,)).fetchone()
   c.execute('UPDATE paper_jobs SET status=?,attempts=attempts+1,updated=? WHERE id=?',('processing',now(),jid))
- source=safe_file(row['source_path']);result=[]
+ source=safe_file(row['source_path']);result=[];errors=[];occurrence=-1
  with tempfile.TemporaryDirectory() as temp:
   if source.suffix=='.pdf':
    subprocess.run(['pdftoppm','-r','220','-png',str(source),temp+'/page'],capture_output=True,check=True,timeout=180);pages=sorted(Path(temp).glob('page-*.png'))
   else:pages=[source]
-  for page in pages:
+  for page_no,page in enumerate(pages,1):
    im=cv2.imread(str(page))
-   if im is None:raise ValueError('Nie można odczytać skanu')
+   if im is None:errors.append(f'Strona {page_no}: nie można odczytać skanu');continue
    parts=crop_works(im,220)
-   if not parts:raise ValueError('Nie znaleziono czterech znaczników. Oryginał zachowano do ręcznego sprawdzenia.')
-   for index,part in enumerate(parts):
-    target=FILES/f'crop-{jid}-{len(result):02d}.png';cv2.imwrite(str(target),part['image']);codes=read_barcodes(target)
-    if len(codes)!=1:raise ValueError('Kod pracy jest nieczytelny albo wycięcie zawiera wiele kodów')
-    barcode=codes[0]
-    if not barcode.startswith(f'{part["group"]:03d}'):raise ValueError('Numer grupy w kodzie nie pasuje do znaczników')
-    with db() as c:
-     existing=c.execute('SELECT id,barcode FROM paper_scans WHERE job_id=? AND occurrence=?',(jid,len(result))).fetchone()
-     if existing:
-      if existing['barcode']!=barcode:raise ValueError('Kolejność prac zmieniła się podczas ponowienia skanu')
-      result.append({'scan_id':existing['id'],'barcode':barcode,'group':part['group']});continue
-     variant=c.execute('SELECT v.*,q.manifest FROM paper_variants v JOIN paper_quizzes q ON q.id=v.quiz_id WHERE barcode=?',(barcode,)).fetchone()
-     if not variant:raise ValueError('Nieznany kod pracy: '+barcode)
-     from points_marks import detect
-     tasks=json.loads(variant['tasks']);manual=detect(part['image'],tasks);manual['trusted']=bool(row['manual_mode'])
-     if row['manual_mode']:
-      if not manual['present']:raise ValueError('Nie widać figur do ręcznego odczytu punktów')
-      manual['confirmed']=True;manual['uncertain']=any(x['uncertain'] for x in manual['points'])
-     context=target.with_name(target.stem+'-context.png');cv2.imwrite(str(context),part.get('context_image',part['image']))
-     frame=part.get('content_frame',[])
-     maximum=sum(t.get('max_points',3) for t in tasks)
-     c.execute('INSERT OR IGNORE INTO paper_scans(job_id,barcode,crop_path,status,maximum,evaluation,updated,received_at,occurrence,context_path,content_frame) VALUES(?,?,?,?,?,?,?,?,?,?,?)',(jid,barcode,str(target.relative_to(DATA)),'needs_review' if manual['trusted'] and manual['uncertain'] else 'waiting_auth',maximum,json.dumps({'manual_marks':manual}),now(),row['received_at'],len(result),str(context.relative_to(DATA)),json.dumps(frame)))
-     scan=c.execute('SELECT id FROM paper_scans WHERE job_id=? AND occurrence=?',(jid,len(result))).fetchone()
-     if manual['trusted'] and manual['confirmed'] and not manual['uncertain']:
-      assignment=c.execute('SELECT * FROM paper_assignments WHERE barcode=?',(barcode,)).fetchone();profile=quiz_profile(c,variant['quiz_id'],assignment['class_name'] if assignment else '')
-      if assignment and profile:
-       points=sum(x['points'] for x in manual['points']);evaluation={'manual_marks':manual,'tasks':[{'question_id':str(i+1),'points':m['points'],'uncertain':False,'answer_text':'','comment':'Ocena ręczna nauczyciela'} for i,m in enumerate(manual['points'])]}
-       c.execute('UPDATE paper_scans SET class_name=?,student_id=?,points=?,grade=?,grading_profile=?,status=?,description=?,evaluation=? WHERE id=?',(assignment['class_name'],assignment['student_id'],points,school_grade(points,maximum,profile),profile,'reviewed','Punkty odczytane z figur zamalowanych przez nauczyciela.',json.dumps(evaluation),scan['id']))
-     result.append({'scan_id':scan['id'],'barcode':barcode,'group':part['group']})
- with db() as c:c.execute('UPDATE paper_jobs SET status=?,result=?,error=?,updated=? WHERE id=?',('cropped',json.dumps(result),'',now(),jid))
+   if not parts:errors.append(f'Strona {page_no}: nie rozpoznano znaczników. Oryginał zachowano.');continue
+   for part in parts:
+    occurrence+=1
+    try:
+     target=FILES/f'crop-{jid}-{occurrence:02d}-geometry-v2.png'
+     probe=Path(temp)/'barcode.png';cv2.imwrite(str(probe),part['image']);codes=read_barcodes(probe)
+     if len(codes)!=1:raise ValueError('Kod pracy jest nieczytelny albo wycięcie zawiera wiele kodów')
+     barcode=codes[0]
+     if not barcode.startswith(f'{part["group"]:03d}'):raise ValueError('Numer grupy w kodzie nie pasuje do znaczników')
+     with db() as c:
+      existing=c.execute('SELECT * FROM paper_scans WHERE job_id=? AND occurrence=?',(jid,occurrence)).fetchone()
+      if existing:
+       if existing['barcode']!=barcode:raise ValueError('Kolejność prac zmieniła się podczas ponowienia skanu')
+       if refresh_existing:
+        target=target.with_name(target.stem+'-'+secrets.token_hex(4)+'.png')
+        context=target.with_name(target.stem+'-context.png');cv2.imwrite(str(target),part['image']);cv2.imwrite(str(context),part.get('context_image',part['image']))
+        c.execute('INSERT INTO paper_audit(action,barcode,details,created) VALUES(?,?,?,?)',('recrop',barcode,json.dumps(dict(existing)),now()))
+        c.execute('UPDATE paper_scans SET crop_path=?,context_path=?,content_frame=?,status=?,updated=? WHERE id=?',(str(target.relative_to(DATA)),str(context.relative_to(DATA)),json.dumps(part.get('content_frame',[])),existing['status'] if existing['status']=='reviewed' else 'waiting_auth',now(),existing['id']))
+       result.append({'scan_id':existing['id'],'barcode':barcode,'group':part['group']});continue
+      variant=c.execute('SELECT v.*,q.manifest FROM paper_variants v JOIN paper_quizzes q ON q.id=v.quiz_id WHERE barcode=?',(barcode,)).fetchone()
+      if not variant:raise ValueError('Nieznany kod pracy: '+barcode)
+      cv2.imwrite(str(target),part['image'])
+      from points_marks import detect
+      tasks=json.loads(variant['tasks']);manual=detect(part['image'],tasks);manual['trusted']=bool(row['manual_mode']);manual['scan_geometry']={'decoded_markers':part.get('marker_ids',[]),'inferred_corners':part.get('inferred_corners',0)}
+      if row['manual_mode']:
+       if not manual['present']:raise ValueError('Nie widać figur do ręcznego odczytu punktów')
+       manual['confirmed']=True;manual['uncertain']=any(x['uncertain'] for x in manual['points'])
+      context=target.with_name(target.stem+'-context.png');cv2.imwrite(str(context),part.get('context_image',part['image']))
+      frame=part.get('content_frame',[])
+      maximum=sum(t.get('max_points',3) for t in tasks)
+      c.execute('INSERT OR IGNORE INTO paper_scans(job_id,barcode,crop_path,status,maximum,evaluation,updated,received_at,occurrence,context_path,content_frame) VALUES(?,?,?,?,?,?,?,?,?,?,?)',(jid,barcode,str(target.relative_to(DATA)),'needs_review' if manual['trusted'] and manual['uncertain'] else 'waiting_auth',maximum,json.dumps({'manual_marks':manual}),now(),row['received_at'],occurrence,str(context.relative_to(DATA)),json.dumps(frame)))
+      scan=c.execute('SELECT id FROM paper_scans WHERE job_id=? AND occurrence=?',(jid,occurrence)).fetchone()
+      if manual['trusted'] and manual['confirmed'] and not manual['uncertain']:
+       assignment=c.execute('SELECT * FROM paper_assignments WHERE barcode=?',(barcode,)).fetchone();profile=quiz_profile(c,variant['quiz_id'],assignment['class_name'] if assignment else '')
+       if assignment and profile:
+        points=sum(x['points'] for x in manual['points']);evaluation={'manual_marks':manual,'tasks':[{'question_id':str(i+1),'points':m['points'],'uncertain':False,'answer_text':'','comment':'Ocena ręczna nauczyciela'} for i,m in enumerate(manual['points'])]}
+        c.execute('UPDATE paper_scans SET class_name=?,student_id=?,points=?,grade=?,grading_profile=?,status=?,description=?,evaluation=? WHERE id=?',(assignment['class_name'],assignment['student_id'],points,school_grade(points,maximum,profile),profile,'reviewed','Punkty odczytane z figur zamalowanych przez nauczyciela.',json.dumps(evaluation),scan['id']))
+      result.append({'scan_id':scan['id'],'barcode':barcode,'group':part['group']})
+    except ValueError as exc:
+     errors.append(f'Strona {page_no}, grupa {part["group"]:03d}: {exc}')
+ with db() as c:c.execute('UPDATE paper_jobs SET status=?,result=?,error=?,updated=? WHERE id=?',('needs_review' if errors else 'cropped',json.dumps(result),' | '.join(errors)[:2000],now(),jid))
  return result
 
 def oauth_status():
