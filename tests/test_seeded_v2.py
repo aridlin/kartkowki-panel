@@ -25,6 +25,20 @@ class SeedV2Tests(unittest.TestCase):
   self.assertEqual(len(signatures),160)
   damaged=copy.deepcopy(meta);damaged['groups'][0]['tasks'][1]['parts'][1]['answer_numerator']+=1
   with self.assertRaises(ValueError):verify_manifest(damaged)
+ def test_single_example_correction_preserves_first_expressions(self):
+  from paper_authoring import render_bundle
+  recipe=self.recipe();before=manifest(recipe,123456);corrected=copy.deepcopy(recipe);corrected['edition']='single-example-correction'
+  for task in corrected['templates']:
+   part=task['parts'][0];part.update(label='',max_points=3,rubric='1 pkt za przekształcenia, 1 za obliczenia, 1 za wynik.');task.update(parts=[part],max_points=3,rubric=part['rubric'])
+  after=manifest(corrected,123456);verify_manifest(after)
+  for old,new in zip(before['groups'],after['groups']):
+   self.assertNotEqual(old['barcode_value'],new['barcode_value'])
+   self.assertEqual([len(t['parts']) for t in new['tasks']],[1,1,1]);self.assertEqual(sum(t['max_points'] for t in new['tasks']),9)
+   for a,b in zip(old['tasks'],new['tasks']):self.assertEqual(a['parts'][0]['expression'],b['expression'])
+  with tempfile.TemporaryDirectory() as temp:
+   result=render_bundle(after,temp);key=PdfReader(Path(temp)/'Klucz_odpowiedzi.pdf')
+   self.assertEqual(len(key.pages),1);self.assertIn('9 pkt',key.pages[0].extract_text());self.assertNotIn('11 pkt',key.pages[0].extract_text())
+   self.assertEqual(len(PdfReader(Path(temp)/'Kartkowka_ulamki_30_grup.pdf').pages),16)
  def test_render_import_offline_and_doc_code_filter(self):
   import paper_workflow as p
   from paper_authoring import render_bundle

@@ -106,19 +106,20 @@ def render(data,out):
   c.setDash(4,4);c.setStrokeColor(HexColor('#777777'));c.setLineWidth(.5);c.line(18,HH,W-18,HH);c.setDash();c.showPage()
  c.save()
  key=canvas.Canvas(str(out/'Klucz_odpowiedzi.pdf'),pagesize=(W,H),invariant=True);metadata(key,'Klucz — '+data['title'])
- perpage=16
+ single=all(len(task['parts'])==1 for group in data['groups'] for task in group['tasks'])
+ perpage=32 if single else 16;rowheight=21 if single else 42
  for offset in range(0,len(data['groups']),perpage):
-  key.setFont('DVB',14);key.drawString(35,H-35,'Klucz odpowiedzi · '+data['title']);key.setFont('DV',9);key.drawString(35,H-52,'Klasa 1bb · 11 pkt: zadanie 1 — 3 pkt; zadania 2 i 3 — po 4 pkt (2 + 2).')
+  key.setFont('DVB',14);key.drawString(35,H-35,'Klucz odpowiedzi · '+data['title']);key.setFont('DV',9);key.drawString(35,H-52,'Klasa 1bb · '+str(sum(t['max_points'] for t in data['groups'][0]['tasks']))+' pkt · '+', '.join(f"zadanie {i}: {t['max_points']} pkt" for i,t in enumerate(data['groups'][0]['tasks'],1)))
   key.setFont('DVB',9)
   for x,label in [(35,'Grupa'),(90,'Zadanie 1'),(170,'Zadanie 2'),(265,'Zadanie 3'),(365,'Kod pracy')]:key.drawString(x,H-76,label)
   for row,g in enumerate(data['groups'][offset:offset+perpage]):
-   top=89+row*42
-   if row%2==0:key.setFillColor(HexColor('#EEEEEE'));key.rect(30,H-top-39,W-60,42,stroke=0,fill=1)
-   key.setFillColorRGB(0,0,0);key.setFont('DV',9);key.drawString(35,H-top-19,f'{g["group"]:03d}')
+   top=89+row*rowheight
+   if row%2==0:key.setFillColor(HexColor('#EEEEEE'));key.rect(30,H-top-rowheight+3,W-60,rowheight,stroke=0,fill=1)
+   key.setFillColorRGB(0,0,0);key.setFont('DV',9);key.drawString(35,H-top-(12 if single else 19),f'{g["group"]:03d}')
    for x,task in zip([90,170,265],g['tasks']):
     for pi,part in enumerate(task['parts']):
      text=(part['label']+') ' if part['label'] else '')+part['answer_mixed'];key.setFont('DV',9);key.drawString(x,H-top-12-pi*17,text)
-   key.setFont('DV',7);key.drawString(365,H-top-19,g['barcode_value'])
+   key.setFont('DV',7);key.drawString(365,H-top-(12 if single else 19),g['barcode_value'])
   key.showPage()
  key.save()
  (out/'zadania_i_kody.json').write_text(json.dumps(data,ensure_ascii=False,indent=2))
