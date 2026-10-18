@@ -88,6 +88,9 @@ else:
 # Preserve the quiz identity while changing barcode prefix to the requested group code.
 if os.environ.get('QUIZ_TEMPLATE'):data=fixed_manifest(data)
 verify_manifest(data)
+if data.get('generation',{}).get('version')==2:
+ from paper_generator_v2 import render
+ render(data,OUT);sys.exit(0)
 if not data.get('generation'):
  for g in data['groups']:g['barcode_value']=g['submission_id']=f"{g['group']:03d}{data['quiz_id'][:12].upper()}"
 data['set_number']=SET

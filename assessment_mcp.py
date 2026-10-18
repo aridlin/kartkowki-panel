@@ -5,6 +5,7 @@ from paper_authoring import available_models
 init()
 TOOLS=[{'name':'list_assessments','description':'List stored classroom assessments and their classes.','inputSchema':{'type':'object','properties':{},'additionalProperties':False}}, {'name':'get_coded_work','description':'Read the stored key, assignment, evaluation and latest scan for one full barcode.','inputSchema':{'type':'object','properties':{'barcode':{'type':'string'}},'required':['barcode'],'additionalProperties':False}}, {'name':'grade_scanned_work','description':'Evaluate one cropped scan with the server Codex OAuth account and persist points, grade and description.','inputSchema':{'type':'object','properties':{'scan_id':{'type':'integer'}},'required':['scan_id'],'additionalProperties':False}}]
 TOOLS += [
+ {'name':'propose_quiz_from_recipe','description':'Queue an exact, source-authored v2 seeded recipe with multipart tasks without secondary document barcodes. Criteria and candidate domains stay in the source package.','inputSchema':{'type':'object','properties':{'recipe':{'type':'object','additionalProperties':True},'seed':{'type':'integer','minimum':0,'maximum':4294967295},'instructions':{'type':'string'}},'required':['recipe','instructions'],'additionalProperties':False}},
  {'name':'recreate_clean_work','description':'Recreate a clean work from its seed barcode and original source recipe, without a quiz database or model call. Returns the teacher download path.','inputSchema':{'type':'object','properties':{'barcode':{'type':'string'}},'required':['barcode'],'additionalProperties':False}},
  {'name':'list_models','description':'List models available in the server Codex OAuth session.','inputSchema':{'type':'object','properties':{},'additionalProperties':False}},
  {'name':'get_quiz_manifest','description':'Read exact expressions, keys, point figures and grading policy for one assessment.','inputSchema':{'type':'object','properties':{'quiz_id':{'type':'string'}},'required':['quiz_id'],'additionalProperties':False}},
@@ -22,6 +23,7 @@ def call(name,args):
   if not row:raise ValueError('Unknown assessment')
   return [{'type':'text','text':json.dumps(dict(row),ensure_ascii=False)}]
  if name=='clone_quiz_for_class':return [{'type':'text','text':json.dumps(clone_quiz(args['quiz_id'],args))}]
+ if name=='propose_quiz_from_recipe':return [{'type':'text','text':json.dumps(start_author({'seed':args.get('seed'),'recipe':args['recipe'],'count':args['recipe']['count'],'instructions':args['instructions'],'randomize':True}))}]
  if name=='propose_quiz':return [{'type':'text','text':json.dumps(start_author(args))}]
  if name=='get_quiz_draft':
   with db() as c:row=c.execute('SELECT * FROM paper_author_jobs WHERE id=?',(args['job_id'],)).fetchone()

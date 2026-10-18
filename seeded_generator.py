@@ -129,6 +129,7 @@ def manifest(recipe,seed):
  return {'schema_version':2,'quiz_id':hashlib.sha256(canonical({'recipe':recipe_hash(recipe),'seed':seed})).hexdigest()[:32],'title':recipe['title'],'created_date':recipe['created_date'],'set_number':recipe.get('set_number',1),'is_test':recipe.get('is_test',False),'instruction':recipe.get('instruction','Oblicz. Wyniki zapisz jako liczby całkowite lub liczby mieszane.'),'barcode_format':'CODE128','aruco_dictionary':'DICT_5X5_250','generation':{'version':VERSION,'recipe_id':recipe_id(recipe),'recipe_sha256':recipe_hash(recipe),'seed':seed,'recipe':recipe},'groups':groups_from_seed(recipe,seed)}
 def fixed_manifest(meta,seed=None):
  """Freeze explicitly approved questions (e.g. a correction/clone) without mutating them."""
+ if meta.get('generation',{}).get('version')==2:raise ValueError('Multipart v2 copies require a new source recipe and registered document identities; do not discard subparts')
  recipe={'version':VERSION,'mode':'fixed','edition':secrets.token_hex(8),'count':len(meta['groups']),'title':meta['title'],'created_date':meta.get('created_date','2026-01-01'),'set_number':meta.get('set_number',1),'is_test':meta.get('is_test',False),'instruction':meta.get('instruction','Oblicz. Wyniki zapisz jako liczby całkowite lub liczby mieszane.'),'groups':[{'tasks':[{'expression':t['expression'],'max_points':t.get('max_points',3),'rubric':t.get('rubric',''),'criteria':{}} for t in g['tasks']]} for g in meta['groups']]}
  result=manifest(recipe,secrets.randbelow(2**32) if seed is None else seed)
  for key in ['parent_quiz_id','author_model','author_instructions']:
@@ -188,6 +189,19 @@ def main():
   subprocess.run([sys.executable,str(Path(__file__).with_name('paper_generator.py'))],env=env,check=True)
   from pypdf import PdfReader,PdfWriter
   page=PdfReader(args.output/'Kartkowka_ulamki_30_grup.pdf').pages[0];page.mediabox.lower_left=(0,float(page.mediabox.height)/2);page.cropbox=page.mediabox;writer=PdfWriter();writer.add_page(page)
+  if meta.get('generation',{}).get('version')==2:writer.add_metadata({'/Creator':'Kartkowki','/Subject':'Work '+args.barcode})
   with (args.output/'Arkusz.pdf').open('wb') as f:writer.write(f)
  print(json.dumps({'group':decode(args.barcode)['group'],'recipe_id':recipe_id(recipe),'output':str(args.output),'database_required':False,'ai_required':False}))
+# Dispatch additions do not change protocol-v1 sampling or canonicalisation.
+_v1_barcode,_v1_decode,_v1_validate,_v1_groups,_v1_manifest,_v1_verify,_v1_reconstruct=barcode,decode,validate_recipe,groups_from_seed,manifest,verify_manifest,reconstruct
+def _v2():
+ import seeded_generator_v2
+ return seeded_generator_v2
+def barcode(recipe,seed,group):return _v2().barcode(recipe,seed,group) if recipe.get('version')==2 else _v1_barcode(recipe,seed,group)
+def decode(code):return _v2().decode(code) if isinstance(code,str) and code[3:7]=='9102' else _v1_decode(code)
+def validate_recipe(recipe):return _v2().validate_recipe(recipe) if recipe.get('version')==2 else _v1_validate(recipe)
+def groups_from_seed(recipe,seed,through=None):return _v2().groups_from_seed(recipe,seed,through) if recipe.get('version')==2 else _v1_groups(recipe,seed,through)
+def manifest(recipe,seed):return _v2().manifest(recipe,seed) if recipe.get('version')==2 else _v1_manifest(recipe,seed)
+def verify_manifest(meta):return _v2().verify_manifest(meta) if meta.get('generation',{}).get('version')==2 else _v1_verify(meta)
+def reconstruct(code,recipe):return _v2().reconstruct(code,recipe) if recipe.get('version')==2 else _v1_reconstruct(code,recipe)
 if __name__=='__main__':main()

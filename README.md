@@ -93,3 +93,11 @@ The restored `Arkusz.pdf` keeps the original barcode. Neither a quiz database, a
 The teacher panel can also reconstruct a code using its source-file registry at `/papers/recreate/<barcode>.pdf`; this operation does not consult quiz DB rows. Unknown seed codes in the scanner field offer that recovery link. `recreate_clean_work` exposes the same operation to Codex through MCP. The registry and source ZIP are preserved with assessment files. Existing worksheets and their codes/keys remain unchanged.
 
 Tests require Poppler (`pdftoppm`), zbar (`zbarimg`) and DejaVu fonts in addition to Python requirements. The round-trip test unpacks only the original code package, sets an unusable DB location, renders offline, verifies matching tasks and barcodes, and rejects a modified recipe.
+
+### Multipart seeded recipes (protocol 9102)
+
+Protocol v2 keeps three scored tasks but supports one or two independently keyed parts per task, proper fractions and up to 60 groups. V1 (`9101`) sampling and earlier source archives remain unchanged. The `propose_quiz_from_recipe` MCP operation accepts a source-authored candidate-domain recipe (optionally with an explicit seed); it validates every candidate and produces a draft through the same print/decode checks. Publish the reviewed draft for the chosen class with the usual publication operation.
+
+The example builder in `examples/dzialania_na_liczbach.py` produces uniform domains for the three referenced exercise types. The recipe stores each part's criteria, point rubric and exact AST candidate domain. The seed draws unique expressions. Neither pupil information nor the answer criteria are encoded in the barcode. V2 source packages freeze both protocol implementations and their renderers; a scanned v2 code recreates all subparts and their keys offline.
+
+V2 sheets use a 4 mm grid at 0.5 pt, 40% black for photocopying. By the teacher's explicit exception, quiz papers use their assessment Code128 and corner markers only: do not add secondary LibreOffice/docidentity `@$` barcodes. The scanner still ignores any such identifiers in older files when selecting an assessment code. Teacher tables show all subpart answers, and grading sums every part using the stored rubrics. Exact clones of v2 multipart recipes require a new recipe edition; the v1 cloning operation refuses to silently drop subparts.

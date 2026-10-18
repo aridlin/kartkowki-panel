@@ -23,7 +23,7 @@ def crop_works(image,dpi=220):
   if ids is None:continue
   for pts,mid in zip(corners,ids.flatten()):
    mid=int(mid);quad=pts.reshape(4,2)
-   if 0<=mid<120 and not any(mid==old and np.linalg.norm(quad.mean(axis=0)-other.mean(axis=0))<10 for old,other in entries):entries.append((mid,quad))
+   if 0<=mid<240 and not any(mid==old and np.linalg.norm(quad.mean(axis=0)-other.mean(axis=0))<10 for old,other in entries):entries.append((mid,quad))
  out=[];used=set();scale=dpi/72
  for index,(mid,points) in enumerate(entries):
   if index in used:continue

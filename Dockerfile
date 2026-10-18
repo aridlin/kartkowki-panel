@@ -10,7 +10,7 @@ RUN npm install --global @openai/codex@0.156.1 && npm cache clean --force
 WORKDIR /app
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py grade_rules.py model.py scans.py paper_workflow.py paper_worker.py scan_geometry.py assessment_mcp.py import_papers.py points_marks.py paper_generator.py paper_authoring.py seeded_generator.py /app/
+COPY app.py grade_rules.py model.py scans.py paper_workflow.py paper_worker.py scan_geometry.py assessment_mcp.py import_papers.py points_marks.py paper_generator.py paper_authoring.py seeded_generator.py seeded_generator_v2.py paper_generator_v2.py /app/
 COPY templates /app/templates
 COPY static /app/static
 RUN useradd --uid 10001 --create-home kartkowki && mkdir /data /home/kartkowki/.codex && chown -R kartkowki:kartkowki /data /home/kartkowki/.codex
